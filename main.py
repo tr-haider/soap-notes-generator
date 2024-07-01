@@ -56,7 +56,7 @@ def query_openai(prompt):
             st.error("You have exceeded the rate limit for GPT-4. Please try again later.")
         elif "context length" in error_message.lower():
             st.error(
-                "The provided text exceeds the maximum allowed length for GPT-3.5-Turbo, which is 16,385 tokens. Please reduce the length of your input. As a guideline, try to limit your input to approximately 8,000 words or about 16 pages of text. If possible, summarize the content yourself before submitting it for processing.")
+                "Please reduce the length of your input. As a guideline, try to limit your input to approximately 8,000 words or about 16 pages of text. If possible, summarize the content yourself before submitting it for processing.")
         else:
             st.error(f"An error occurred with OpenAI: {e}")
         return None
