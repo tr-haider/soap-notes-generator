@@ -1,0 +1,76 @@
+SMGB Bi-Monthly Review 
+Wed. Jun 26, 2024
+
+Summary:
+
+The meeting began with a discussion about design updates for the scanning flows, with Zubaria presenting two variations for the scanning screen. Graham expressed preference for the intuitive flow of the scan button and suggested reconsidering the limitation on damage images. They also discussed the placement of buttons in the app interface, with Tim emphasizing the importance of user convenience and ease of use. They considered the possibility of implementing a feature that remembers the user's last session and discussed the potential need for a tooltip to guide users on the scanning screen. 
+
+The team then discussed various strategies to enhance user engagement in the SMGB application, including in-app notifications for nearby events, reminders for incomplete tasks, promotional messages, community development, and incentives for active users. Graham plans to have further discussions with Tim regarding budgeting and prioritization to implement these features. They also discussed the potential of developing Korean and Japanese versions of the app, stressing the significance of understanding cultural differences. 
+
+The team then focused on the user flow for damage recognition, addressing the need for multiple images for analysis, the transition between screens after scanning for damage, and the display of results. They also discussed the image processing requirements for damage analysis, highlighting the importance of confirming the number of images necessary for an accurate assessment. The team deliberated on the current process of sending images for fitness and damage analysis, ultimately deciding to simplify the user experience by sending two images for each. 
+
+Finally, Zahid Aziz led a discussion with Bahadar Ali and Naeem Rao regarding the implementation of real-time threshold updates for the mobile application. The conversation delved into the potential challenges of frequent updates, the practicality of using Firebase Remote Config for real-time changes, and the necessity of API calls to retrieve and utilize updated values during scanning sessions.
+
+
+Chapters & Topics:
+
+Discussion on Scanning Screen Design
+Naeem initiated the discussion on the scanning screen design, and Zubaria shared two variations for the scanning screen, seeking feedback on the user interaction and image limitations. Tim and Graham provided input on the flow and image limitations, while considering the intuitive aspects of the design.
+* Design review for scanning flows
+
+Discussion on UI/UX and Image Requirements for NICOL API
+Graham Dodge expresses the need for at least two images to be sent to the NICOL API for damage analysis, highlighting potential issues with only sending one image. He also provides feedback on the UI/UX design, emphasizing the importance of clarity for users in understanding which image is being sent for analysis.
+
+Discussion on Placement of Buttons
+Tim Chase and Graham Dodge debate the placement of buttons for the app, with Tim advocating for the buttons to be at the bottom for easier access while using the phone with one hand. Graham expresses concerns about cluttering the bottom and suggests having the buttons at the top to avoid confusion. They also discuss the need to show an interstitial screen with a pop-up choice and consider the option to toggle between scan for fit and scan for damage.
+
+Discussion on Wording and Icon for Scan Button
+Graham, Tim, and Zubaria debate whether to change the wording and icon for the scan button. Tim suggests using "start scan" instead of "take photo," but Zubaria questions the inconsistency with the instruction at the top. They also consider the branding implications of using a camera icon for the scan button and ultimately decide to make the button consistent with the branding.
+
+Discussion on SMGB Application Engagement Strategies
+Zahid Aziz and Naeem Rao present strategies to engage users of the SMGB application, such as sending push notifications for nearby events, reminding users to fill the BFT, promoting new marketing balls, engaging inactive users, and developing a golf community within the app. Graham Dodge appreciates the ideas and plans to discuss budgeting and prioritization with Tim offline to implement these features.
+
+Localization Strategy Discussion
+Tim and Graham explore the idea of creating Korean and Japanese versions of the app, highlighting the importance of addressing cultural nuances. Graham shares his experience with localization efforts and suggests seeking partners for assistance. They agree to prioritize countries for localization and request the necessary information to start planning.
+* Localization for different languages
+
+Discussion on User Flow for Damage Recognition
+Graham Dodge, Naeem Rao, and Tim Chase deliberate on the user flow for damage recognition, focusing on the number of images required for analysis and the transition between screens after scanning for damage. They explore options for displaying results and discuss the functionality of buttons for user actions, such as rescan and cancel.
+
+Discussion on Image Processing for Damage Analysis
+Graham Dodge leads a discussion on the image processing requirements for damage analysis, emphasizing the need to confirm the number of images needed for an effective assessment. The team decides to send two images for fitness and two images for damage, streamlining the user experience. They also discuss the process of determining the best response for damage analysis based on the images received.
+* Confidence threshold for damage analysis
+
+Adjusting Confidence Thresholds and Backend Configuration
+Graham Dodge proposes lowering the confidence threshold from 80% to 70% to prevent discarding results below 80%. There is a debate about whether this change can be implemented as a patch or if it requires a new build. Tim Chase agrees to proceed with the change, and there is a suggestion to move the configuration to the backend for easier future adjustments.
+* Backend configuration for threshold change
+
+Discussion on Task Updates and Feedback
+Zahid Aziz updates the team on the task progress, aiming to upload a build by Friday. The discussion concludes with expressions of gratitude and farewells. Additionally, there are repeated attempts to initiate a discussion or seek feedback, but it seems to be unresolved.
+
+Discussion on Real-time Threshold Updates
+Zahid Aziz, Bahadar Ali, and Naeem Rao engage in a detailed discussion about the practicality of real-time threshold updates for the mobile application. They explore the implications of frequent calls for updates, the use of Firebase Remote Config, and the need for API calls to pull and use the updated values during the scanning session.
+
+
+Action Items:
+
+* Zahid Aziz will share the design review with the team and move it to the development phase.
+* Graham Dodge will confirm with Braden the number of images needed for damage recognition and update the front end to accommodate at least two or three images for scanning for damage.
+* Naeem Rao will change the confidence threshold from 80% to 70% and push the update to production.
+* Bahadar Ali will implement the backend configuration for the confidence threshold and provide an option for the admin to change it.
+* Naeem Rao will implement the logic on the mobile side for the confidence threshold change.
+* Bahadar Ali will review the list of features and provide feedback next week.
+* Graham Dodge will ensure that Brayden has the setup to receive and use at least two images for damage analysis.
+
+
+Key Questions:
+
+* What is the best approach for the design update for scanning flows?
+* How can we engage users of the SMGB application on a daily or weekly basis?
+* What is the ideal confidence threshold for damage analysis?
+* Can we move the configuration for the confidence threshold to the backend to avoid frequent app updates?
+
+
+Notepad:
+
+* No notes
