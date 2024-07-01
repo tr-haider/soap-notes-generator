@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import pandas as pd
 import fitz  # PyMuPDF
-
+from moviepy.editor import VideoFileClip
 # Load environment variables
 load_dotenv()
 
@@ -40,6 +40,25 @@ def extract_text_from_pdf(pdf_path):
     text = ""
     for page in doc:
         text += page.get_text()
+    return text
+def extract_text_from_audio(audio_file):
+    transcription = openai.audio.transcriptions.create(
+        model="whisper-1",
+        file=audio_file
+    )
+    return transcription.text
+
+
+# Function to extract text from video
+def extract_text_from_video(video_path):
+    video_path_str = str(video_path)
+    # Extract audio from video
+    video = VideoFileClip(video_path_str)
+    audio_path = video_path.with_suffix(".wav")
+    video.audio.write_audiofile(audio_path)
+
+    # Transcribe audio to text
+    text = extract_text_from_audio(audio_path)
     return text
 
 # Function to query OpenAI GPT-4 for summarization
@@ -88,22 +107,26 @@ def run_summarizer_app():
         )
 
         st.title("Meeting Notes Summarizer")
-        uploaded_file = st.file_uploader("Upload a file with meeting notes", type=["txt", "xlsx", "pdf"])
+        uploaded_file = st.file_uploader("Upload a file with meeting notes", type=["txt", "xlsx", "pdf", "mp3", "wav", "mp4", "mkv", "avi"])
         summary_type = st.text_input("Specify the type of summary you need (e.g., action items, conclusions)")
-
         if uploaded_file is not None:
-            save_path = save_uploaded_file(uploaded_file)
-            file_extension = uploaded_file.name.split('.')[-1]
+            with st.spinner('Processing file...'):
+                save_path = save_uploaded_file(uploaded_file)
+                file_extension = uploaded_file.name.split('.')[-1]
 
-            if file_extension == "txt":
-                notes_text = read_text_file(save_path)
-            elif file_extension == "xlsx":
-                notes_text = extract_text_from_xlsx(save_path)
-            elif file_extension == "pdf":
-                notes_text = extract_text_from_pdf(save_path)
-            else:
-                st.error("Unsupported file type")
-                return
+                if file_extension == "txt":
+                    notes_text = read_text_file(save_path)
+                elif file_extension == "xlsx":
+                    notes_text = extract_text_from_xlsx(save_path)
+                elif file_extension == "pdf":
+                    notes_text = extract_text_from_pdf(save_path)
+                elif file_extension in ["mp3", "wav"]:
+                    notes_text = extract_text_from_audio(save_path)
+                elif file_extension in ["mp4", "mkv", "avi"]:
+                    notes_text = extract_text_from_video(save_path)
+                else:
+                    st.error("Unsupported file type")
+                    return
 
             if st.button("Summarize"):
                 with st.spinner('Summarizing...'):

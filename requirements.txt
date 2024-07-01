@@ -3,3 +3,4 @@ openpyxl==3.1.5
 PyMuPDF==1.24.7
 pandas==2.2.2
 python-dotenv==1.0.1
+moviepy==1.0.3
