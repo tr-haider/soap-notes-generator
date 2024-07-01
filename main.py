@@ -81,6 +81,7 @@ def run_summarizer_app():
                 .stButton button:hover {
                     background-color: #45a049;
                 }
+                #MainMenu {visibility: hidden;}
             </style>
             """,
             unsafe_allow_html=True
