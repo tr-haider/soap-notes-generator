@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import fitz  # PyMuPDF
 from moviepy.editor import VideoFileClip
+from datetime import datetime
 # Load environment variables
 load_dotenv()
 
@@ -21,7 +22,13 @@ def save_uploaded_file(uploaded_file):
     save_path = UPLOAD_DIR / uploaded_file.name
     with open(save_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
-    return save_path
+    file_info = {
+        "name": uploaded_file.name,
+        "path": save_path,
+        "size": str(round(int(uploaded_file.size),2)),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    return file_info
 
 # Function to read text from a txt file
 def read_text_file(file_path):
@@ -80,6 +87,7 @@ def query_openai(prompt):
             st.error(f"An error occurred with OpenAI: {e}")
         return None
 
+
 def run_summarizer_app():
     try:
         # Streamlit App
@@ -107,35 +115,62 @@ def run_summarizer_app():
         )
 
         st.title("Meeting Notes Summarizer")
-        uploaded_file = st.file_uploader("Upload a file with meeting notes", type=["txt", "xlsx", "pdf", "mp3", "wav", "mp4", "mkv", "avi"])
         summary_type = st.text_input("Specify the type of summary you need (e.g., action items, conclusions)")
-        if uploaded_file is not None:
-            with st.spinner('Processing file...'):
-                save_path = save_uploaded_file(uploaded_file)
-                file_extension = uploaded_file.name.split('.')[-1]
 
-                if file_extension == "txt":
-                    notes_text = read_text_file(save_path)
-                elif file_extension == "xlsx":
-                    notes_text = extract_text_from_xlsx(save_path)
-                elif file_extension == "pdf":
-                    notes_text = extract_text_from_pdf(save_path)
-                elif file_extension in ["mp3", "wav"]:
-                    notes_text = extract_text_from_audio(save_path)
-                elif file_extension in ["mp4", "mkv", "avi"]:
-                    notes_text = extract_text_from_video(save_path)
-                else:
-                    st.error("Unsupported file type")
-                    return
+        # Sidebar for uploading multiple files
+        st.sidebar.title("Upload Meeting Notes")
+        uploaded_files = st.sidebar.file_uploader("Upload files",
+                                                  type=["txt", "xlsx", "pdf", "mp3", "wav", "mp4", "mkv", "avi"],
+                                                  accept_multiple_files=True)
 
-            if st.button("Summarize"):
-                with st.spinner('Summarizing...'):
-                    prompt = f"Summarize in points the following meeting notes with a focus on {summary_type}:\n\n{notes_text}\n\nSummary:"
-                    summary = query_openai(prompt)
+        files_info = []
+        for uploaded_file in uploaded_files:
+            file_info = save_uploaded_file(uploaded_file)
+            files_info.append(file_info)
 
+        selected_file = st.sidebar.selectbox(
+            "Select a file to view details",
+            files_info,
+            format_func=lambda x: x['name']
+        )
+
+        if selected_file:
+            st.sidebar.write(f"**Timestamp:** {selected_file['timestamp']}")
+            st.sidebar.write(f"**File Size:** {selected_file['size']} bytes")
+            st.sidebar.write(f"**Original File Name:** {selected_file['name']}")
+
+        if st.button("Summarize") and selected_file:
+            file_extension = selected_file["name"].split('.')[-1]
+            if file_extension == "txt":
+                notes_text = read_text_file(selected_file["path"])
+            elif file_extension == "xlsx":
+                notes_text = extract_text_from_xlsx(selected_file["path"])
+            elif file_extension == "pdf":
+                notes_text = extract_text_from_pdf(selected_file["path"])
+            elif file_extension in ["mp3", "wav"]:
+                notes_text = extract_text_from_audio(selected_file["path"])
+            elif file_extension in ["mp4", "mkv", "avi"]:
+                notes_text = extract_text_from_video(selected_file["path"])
+            else:
+                st.error("Unsupported file type")
+                return
+
+            with st.spinner('Summarizing...'):
+                prompt = f"Summarize in points the following meeting notes with a focus on {summary_type}:\n\n{notes_text}\n\nSummary:"
+                summary = query_openai(prompt)
+
+                # Tabs for Transcription and Summary
+                tab1, tab2 = st.tabs(["Extracted Text", "Summary"])
+
+                with tab1:
+                    st.write(notes_text)
+
+                with tab2:
                     if summary:
-                        st.subheader("Summary")
                         st.write(summary)
+                    else:
+                        st.write("Could not generate summary for this file.")
+
     except Exception as e:
         st.error(f"An error occurred: {e}")
 
