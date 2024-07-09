@@ -6,4 +6,4 @@ python-dotenv==1.0.1
 moviepy==1.0.3
 streamlit_mic_recorder==0.0.8
 pydub==0.25.1
-git+https://github.com/openai/whisper.gits
+openai-whisper==20231117
