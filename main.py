@@ -250,7 +250,7 @@ def run_summarizer_app():
             unsafe_allow_html=True
         )
 
-        st.title("Meeting Notes Summarizer")
+        st.title("Soap Notes Generator")
 
         # Sidebar for uploading multiple files
         st.sidebar.title("Upload Meeting Notes")
