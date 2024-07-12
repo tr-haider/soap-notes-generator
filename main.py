@@ -158,6 +158,8 @@ def get_soap_notes_prompt(notes_text):
                     Recommend any medications (e.g., continue taking Tylenol as needed).
                     Encourage adequate hydration and rest.
                     Advise on monitoring symptoms and provide guidance on follow-up if symptoms worsen or do not improve within a specified timeframe (e.g., 5-7 days).
+            
+              Add the dates and medicines name that are mentioned by doctor or patient also.
 
               You can use this soap notes as example.The response format should be like that: 
 
@@ -197,7 +199,8 @@ def get_soap_notes_prompt(notes_text):
                  Plan:
                   - Continue taking Tylenol as needed for fever and pain relief
                   - Encourage adequate hydration and rest
-                  - Monitor temperature and return for follow-up if fever persists or worsens              
+                  - Monitor temperature and return for follow-up if fever persists or worsens     
+                       
 
               """
     )
