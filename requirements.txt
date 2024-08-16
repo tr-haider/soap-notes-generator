@@ -1,9 +1,11 @@
 openai==1.35.7
-openpyxl==3.1.5
 PyMuPDF==1.24.7
 pandas==2.2.2
 python-dotenv==1.0.1
-moviepy==1.0.3
-streamlit_mic_recorder==0.0.8
-pydub==0.25.1
-openai-whisper==20231117
+requests==2.32.3
+pvrecorder==1.2.2
+google-auth==2.32.0
+mysql-connector-python==9.0.0
+boto3==1.34.154
+botocore==1.34.154
+streamlit==1.29.0
