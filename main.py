@@ -1,214 +1,35 @@
+import time
 import streamlit as st
 import openai
 import os
 from dotenv import load_dotenv
-from pathlib import Path
-import pandas as pd
-import fitz  # PyMuPDF
-from moviepy.editor import VideoFileClip
 from datetime import datetime
-from streamlit_mic_recorder import speech_to_text
-from pydub import AudioSegment
-from concurrent.futures import ThreadPoolExecutor,as_completed
-import whisper
+from src.auth import google
+from pvrecorder import PvRecorder
+from src import prompts
+from src.database.crud import create_user,get_user_by_email,create_notes,create_patients
+from src.database.connection import connect_to_db
+import base64
+from src.files.bucket import upload_file_to_s3,read_file_from_url,upload_recording_to_s3
+from src.transcriptions.transcribe import transcribe
+connection, cursor = connect_to_db()
 
+recorder = PvRecorder(device_index=-1, frame_length=512)
 # Load environment variables
 load_dotenv()
-
 # Set your OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Directory to save uploaded files
-UPLOAD_DIR = Path("./uploaded-notes")
-UPLOAD_DIR.mkdir(exist_ok=True)
-
+google_icon_path = os.path.abspath("assets/icons8-google-48.png")
 # Function to save uploaded file
-def save_uploaded_file(uploaded_file):
-    save_path = UPLOAD_DIR / uploaded_file.name
-    with open(save_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    file_info = {
-        "name": uploaded_file.name,
-        "path": save_path,
-        "size": str(round(int(uploaded_file.size),2)),
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def uploaded_file_info(uploaded_file):
+    content = uploaded_file.read()
+    file_info =  {
+            "name": uploaded_file.name,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "size": len(uploaded_file.read()),
+            "content": content
     }
     return file_info
-
-# Function to read text from a txt file
-def read_text_file(file_path):
-    with open(file_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-# Function to extract text from XLSX
-def extract_text_from_xlsx(xlsx_path):
-    df = pd.read_excel(xlsx_path)
-    text = df.to_string(index=False)
-    return text
-
-# Function to extract text from PDF
-def extract_text_from_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return text
-def create_chunks(wav_file):
-    audio = AudioSegment.from_wav(wav_file)
-    chunk_length_ms = 60000
-    transcribed_text = ""
-    chunk_file_names = []
-    # create a directory to store the audio chunks.
-    try:
-        os.mkdir('audio_chunks')
-    except(FileExistsError):
-        pass
-    os.chdir('audio_chunks')
-    num_chunks = len(audio) // chunk_length_ms + 1
-    for i in range(num_chunks):
-        start_time = i * chunk_length_ms
-        end_time = start_time + chunk_length_ms
-
-        # Extract the chunk
-        audio_chunk = audio[start_time:end_time]
-
-        # export audio chunk and save it in the current directory.
-        chunk_filename = f"chunk{i}.wav"
-        audio_chunk.export(chunk_filename, bitrate='192k', format="wav")
-
-        # Debug: Print information about the chunk
-        print(f"Saving chunk{i}.wav: duration {len(audio_chunk)}ms")
-
-        # get the name of the newly created chunk in the AUDIO_FILE variable for later use.
-        chunk_file_names.append(chunk_filename)
-    return chunk_file_names
-def process_chunk(chunk):
-    return extract_text_from_speech(chunk)
-def extract_text_from_speech(audio_file):
-    model = whisper.load_model("base")
-    result = model.transcribe(audio_file)
-    transcribed_text = result["text"]
-    return transcribed_text
-
-def convert_audio_to_wav(audio_file):
-    audio = AudioSegment.from_file(audio_file)
-    wav_file = audio_file.split(".")[0] + ".wav"
-    audio.export(wav_file, format="wav")
-    return wav_file
-
-def extract_text_from_audio(audio_file):
-    audio_file = str(audio_file)
-    chunks = create_chunks(audio_file)
-    num_workers = len(chunks)  # Adjust the number of workers as needed
-    text = ""
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        future_to_chunk = {executor.submit(process_chunk, chunk): chunk for chunk in chunks}
-
-        for future in as_completed(future_to_chunk):
-            chunk = future_to_chunk[future]
-            try:
-                text += future.result()
-            except Exception as exc:
-                print(f'Chunk {chunk} generated an exception: {exc}')
-
-    return text
-
-# Function to extract text from video
-def extract_text_from_video(video_path):
-    video_path_str = str(video_path)
-    # Extract audio from video
-    video = VideoFileClip(video_path_str)
-    audio_path = video_path.with_suffix(".wav")
-    video.audio.write_audiofile(audio_path)
-
-    # Transcribe audio to text
-    text = extract_text_from_audio(audio_path)
-    return text
-
-def get_soap_notes_prompt(notes_text):
-    prompt = (
-        f"""Create well-structured and effective SOAP notes with the following rules for the following patient visit. Include complete headings such as Subjective, Objective, Assessment, and Plan."
-              Patient visit : \n\n{notes_text}\n\n
-              Rules : 
-              1. In Subjective section,follow these points : 
-                 Document the patient's primary symptoms (e.g., fever, cough, sore throat).
-                 Include the duration of symptoms.
-                 Note any relevant exposure history, such as contact with sick individuals.
-                 Record any other related symptoms (e.g., chills, muscle aches).
-                 Mention any treatments the patient has been using (e.g., medications taken).
-
-              2.In Objective section,summarize and cover the following points:
-                Vital Signs: Record specific vital signs, such as temperature, respiratory rate, heart rate, and blood pressure.
-                Physical Examination:
-                   HEENT: Describe findings related to the head, eyes, ears, nose, and throat (e.g., erythema in the throat).
-                   Respiratory: Note findings from lung examination (e.g., clear to auscultation bilaterally).
-                   Cardiovascular: Document heart rate, rhythm, and any abnormal sounds (e.g., S1 and S2 normal).
-                   Musculoskeletal: Include findings if relevant.
-                   Neurological: Include findings if relevant.
-                   Dermatological: Include findings if relevant.
-                   Gastrointestinal: Include findings if relevant.
-                   Diagnostic Tests and Labs: Note any relevant test results (e.g., N/A if no tests were done).
-
-              3.In Assessment section,follow these points : 
-                Assessment:
-                      Identify the condition or diagnosis based on the subjective and objective data (e.g., Acute pharyngitis).
-                      Note specific findings that support the diagnosis (e.g., erythema in the throat).
-
-              4. In Plan section,follow these points :
-                    Recommend any medications (e.g., continue taking Tylenol as needed).
-                    Encourage adequate hydration and rest.
-                    Advise on monitoring symptoms and provide guidance on follow-up if symptoms worsen or do not improve within a specified timeframe (e.g., 5-7 days).
-            
-              Add the dates and medicines name that are mentioned by doctor or patient also.
-
-              You can use this soap notes as example.The response format should be like that: 
-
-              Subjective:
-
-              The patient, John, presents with a chief complaint of fever, cough, and sore throat. He reports that these symptoms began two days ago. He denies being around anyone sick recently but mentions that he has been going to work. In addition to his primary symptoms, John also experiences chills and muscle itches. He states that his temperature at home reached 102 degrees Fahrenheit. He denies any shortness of breath or wheezing. John has been taking Tylenol a couple of times per day to manage his symptoms.
-
-              Objective:
-
-               - Vital Signs
-                   - Temperature: 102 degrees Fahrenheit
-                   - Respiratory rate, heart rate, blood pressure: N/A
-
-               - Physical Examination
-                  - HEENT: Erythema in the back of the throat
-                  - Respiratory: Lungs clear to auscultation bilaterally
-                  - Cardiovascular: Heart rate and rhythm regular, S1 and S2 normal
-                  - Musculoskeletal: N/A
-                  - Neurological: N/A
-                  - Dermatological: N/A
-                  - Gastrointestinal: N/A
-
-               - Diagnostic Test Results and Labs
-                  - N/A
-
-              Assessment & Plan:
-
-                 1. Acute pharyngitis:
-                  - Erythema noted in the back of the throat
-                 Plan:
-                    - Continue taking Tylenol as needed for fever and pain relief
-                    - Encourage adequate hydration and rest
-                    - Monitor symptoms and return for follow-up if symptoms worsen or do not improve within 5-7 days
-
-                 2. Fever:
-                  - Patient reports a temperature of 102 degrees at home
-                 Plan:
-                  - Continue taking Tylenol as needed for fever and pain relief
-                  - Encourage adequate hydration and rest
-                  - Monitor temperature and return for follow-up if fever persists or worsens     
-                       
-
-              """
-    )
-    return prompt
-def get_medical_summary_prompt(notes_text):
-    prompt = f"Summarize the following meeting notes according to medical and health :\n\n{notes_text}\n\nSummary:"
-    return prompt
-
 # Function to query OpenAI GPT-4 for summarization
 def query_openai(prompt):
     try:
@@ -220,7 +41,7 @@ def query_openai(prompt):
     except openai.OpenAIError as e:
         error_message = str(e)
         if "rate limit" in error_message.lower():
-            st.error("You have exceeded the rate limit for GPT-4. Please try again later.")
+            st.error("You have exceeded the rate limit for GPT-3.5 Turbo. Please try again later.")
         elif "context length" in error_message.lower():
             st.error(
                 "Please reduce the length of your input. As a guideline, try to limit your input to approximately 8,000 words or about 16 pages of text. If possible, summarize the content yourself before submitting it for processing.")
@@ -228,6 +49,28 @@ def query_openai(prompt):
             st.error(f"An error occurred with OpenAI: {e}")
         return None
 
+# Function to get patient name
+def get_patient_name(text):
+    start = text.find("The patient,")
+    if start != -1:
+        start += len("The patient,")
+        end = text.find(",", start)
+        if end != -1:
+            name = text[start:end].strip()
+            return name
+    return None
+
+
+def load_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode()
+
+
+@st.cache(show_spinner=False)
+def fetch_user_info(auth_code):
+    token = google.get_token_from_code(auth_code)
+    user_info = google.verify_id_token(token)
+    return user_info
 def run_summarizer_app():
     try:
         st.markdown(
@@ -247,96 +90,304 @@ def run_summarizer_app():
                 .stButton button:hover {
                     background-color: #45a049;
                 }
+                .login-button img {
+                    height: 24px;
+                    width: 24px;
+                    margin-right: 8px;
+                  
+                }
                 #MainMenu {visibility: hidden;}
             </style>
             """,
             unsafe_allow_html=True
         )
+        # Load the Google icon image
+        google_icon_base64 = load_image(google_icon_path)
+        if 'existing_file' not in st.session_state:
+            st.session_state.existing_file = None
 
-        st.title("Soap Notes Generator")
+        if 'patient_name' not in st.session_state:
+            st.session_state.patient_name = {}
+        # Handle user session
+        if 'user_info' not in st.session_state:
+            st.session_state.user_info = None
+        if 'patient_info' not in st.session_state:
+            st.session_state.patient_info = None
+
+        if 'reload' not in st.session_state:
+            st.session_state.reload = False
+
+        if 'user_found' not in st.session_state:
+            st.session_state.user_ref = None
+
+        # Real time transcription
+        if 'start' not in st.session_state:
+             st.session_state.start = True
+        if 'stop' not in st.session_state:
+             st.session_state.stop = True
+        if 'pause' not in st.session_state:
+             st.session_state.pause = True
+        if 'resume' not in st.session_state:
+             st.session_state.resume = True
+        if 'audio' not in st.session_state:
+             st.session_state.audio = []
+        if 'recorded_audio_file' not in st.session_state:
+             st.session_state.recorded_audio_file = None
+
+        # Caching created summaries and SOAP notes
+        if 'summaries' not in st.session_state:
+                 st.session_state.summaries = {}
+        if 'soap_notes' not in st.session_state:
+                 st.session_state.soap_notes = {}
+        if 'extracted_text' not in st.session_state:
+                 st.session_state.extracted_text = {}
+        if st.session_state.user_info:
+            if st.sidebar.button("Logout"):
+                st.session_state.user_info = None
+                st.session_state.user_ref = None
+                st.experimental_set_query_params()
+                with st.spinner('Logging out....'):
+                     time.sleep(3)
+                     st.rerun()
+
+        # s3 upload states
+        if 'uploaded_file_name' not in st.session_state:
+             st.session_state.uploaded_file_name = []
+        if 'file_url' not in st.session_state:
+             st.session_state.file_url = None
+
+
+        col1, col2 = st.columns([50, 1])
+
+        with col1:
+            st.title("Soap Notes Generator")
+        with col2:
+             genre = st.sidebar.radio(
+                "Please select : ",
+                ["Upload files", "Real-time transcription"],
+             )
+             if not st.session_state.user_info:
+                auth_code = st.experimental_get_query_params().get('code')
+                if auth_code:
+                    auth_code = auth_code[0]
+                    user_info = fetch_user_info(auth_code)
+                    if user_info:
+                        st.session_state.user_info = user_info
+                        st.session_state.reload = False
+                        st.experimental_set_query_params()
+                        st.rerun()
+                    else:
+                        st.write("Failed to authenticate.")
+                else:
+                    auth_url = google.get_authorization_url()
+                    login_button_css = f"""
+                    <style>
+                        .login-button {{
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            background-color: white;
+                            color: black;
+                            border: none;
+                            border-radius: 5px;
+                            padding: 5px 20px;
+                            width: 180px;
+                            text-align: center;
+                            text-decoration: none;
+                            font-size: 16px;s
+                            font-weight: bold;
+                            margin-bottom: 10px;
+                      }}
+                      
+                    </style>
+                    <a href="{auth_url}" class="login-button"> <img src="data:image/png;base64,{google_icon_base64}" alt="Google icon">
+                        Sign in with Google</a>
+                    """
+
+                    st.markdown(login_button_css, unsafe_allow_html=True)
+             else:
+                 pass
 
         # Sidebar for uploading multiple files
-        st.sidebar.title("Upload Meeting Notes")
-        uploaded_files = st.sidebar.file_uploader("Upload files",
+        if genre == "Upload files":
+           if st.session_state.user_info:
+                name = st.session_state.user_info['name']
+                email = st.session_state.user_info['email']
+                user = get_user_by_email(email,  cursor)
+                if not user:
+                    st.session_state.user_ref = create_user(name, email, connection, cursor)
+                else:
+                    st.session_state.user_ref = user
+           st.sidebar.title("Upload Meeting Notes")
+           uploaded_files = st.sidebar.file_uploader("Upload files",
                                                   type=["txt", "xlsx", "pdf", "mp3", "wav", "mp4", "mkv", "avi"],
                                                   accept_multiple_files=True)
+           files_info = []
 
-        files_info = []
-        for uploaded_file in uploaded_files:
-            file_info = save_uploaded_file(uploaded_file)
-            files_info.append(file_info)
+           for uploaded_file in uploaded_files:
+               file_info = uploaded_file_info(uploaded_file)
+               files_info.append(file_info)
 
-        selected_file = st.sidebar.selectbox(
+           selected_file = st.sidebar.selectbox(
             "Select a file to view details",
             files_info,
             format_func=lambda x: x['name']
-        )
+           )
 
-        if selected_file:
-            st.sidebar.write(f"**Timestamp:** {selected_file['timestamp']}")
-            st.sidebar.write(f"**File Size:** {selected_file['size']} bytes")
-            st.sidebar.write(f"**Original File Name:** {selected_file['name']}")
+           if selected_file:
+              st.sidebar.write(f"**Timestamp:** {selected_file['timestamp']}")
+              st.sidebar.write(f"**File Size:** {selected_file['size']} bytes")
+              st.sidebar.write(f"**Original File Name:** {selected_file['name']}")
+              st.session_state.clicked = True
+              if  selected_file['name'] not in st.session_state.uploaded_file_name:
+                  format = selected_file['name'].split('.')[-1]
+              folder = ""
+              if format == "txt" or format == "pdf" or format == "xlsx":
+                folder += "text"
+              elif format == "mp3" or format == "wav":
+                folder += "audio"
+              else:
+                folder += "video"
+              st.session_state.existing_file = selected_file['name']
+              if st.session_state.existing_file not in st.session_state.extracted_text:
+                if st.button("Summarize") and selected_file:
+                 with st.spinner('Processing...'):
+                    file_content = selected_file["content"]
+                    file_extension = selected_file["name"].split('.')[-1]
+                    file_name = selected_file['name']
+                    if file_extension in ["txt", "xlsx", "pdf"]:
+                        file_url = upload_file_to_s3(file_content,file_name, folder)
+                        notes_text = read_file_from_url(file_url, file_extension)
+                        st.session_state.file_url = file_url
 
-        st.sidebar.title("Real-Time Transcription")
-        transcription = st.sidebar.checkbox("Enable Transcription")
 
-        transcribed_text = ""
-        if transcription:
-            transcribed_text = speech_to_text(language='en', use_container_width=True, just_once=True, key='STT')
+                    elif file_extension in ["mp3", "wav"]:
+                        job_name, format = f"{selected_file['name'].split('.')[0]}-{datetime.now().strftime('%d%m%Y%H%M%S')}-audio-job", \
+                            selected_file['name'].split('.')[-1]
+                        file_url = upload_file_to_s3(file_content,file_name, folder)
+                        notes_text = transcribe(file_url, job_name, format)
+                        st.session_state.file_url = file_url
 
-        if st.button("Summarize") and selected_file:
-            with st.spinner('Processing...'):
-             file_extension = selected_file["name"].split('.')[-1]
-             if file_extension == "txt":
-                notes_text = read_text_file(selected_file["path"])
-             elif file_extension == "xlsx":
-                notes_text = extract_text_from_xlsx(selected_file["path"])
-             elif file_extension == "pdf":
-                notes_text = extract_text_from_pdf(selected_file["path"])
-             elif file_extension in ["mp3", "wav"]:
-                notes_text = extract_text_from_audio(selected_file["path"])
-             elif file_extension in ["mp4", "mkv", "avi"]:
-                notes_text = extract_text_from_video(selected_file["path"])
-             else:
-                st.error("Unsupported file type")
-                return
 
-            with st.spinner('Summarizing...'):
-                summary_prompt = get_medical_summary_prompt(notes_text)
-                soap_notes_prompt = get_soap_notes_prompt(notes_text)
-                summary = query_openai(summary_prompt)
-                soap_notes = query_openai(soap_notes_prompt)
-                # Tabs for Transcription and Summary
-                tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary","Soap Notes"])
+                    elif file_extension in ["mp4", "mkv", "avi"]:
+                        job_name, format = f"{selected_file['name'].split('.')[0]}-{datetime.now().strftime('%d%m%Y%H%M%S')}-video-job", \
+                        selected_file['name'].split('.')[-1]
+                        file_url = upload_file_to_s3(file_content,file_name, folder)
+                        notes_text = transcribe(file_url, job_name, format)
+                        st.session_state.file_url = file_url
 
-                with tab1:
-                    st.write(notes_text)
-
-                with tab2:
-                    if summary:
-                        st.write(summary)
                     else:
-                        st.write("Could not generate summary for this file.")
-                with tab3:
-                    st.write(soap_notes)
-        elif transcribed_text is not None and len(transcribed_text) > 0:
-            summary_prompt = get_medical_summary_prompt(transcribed_text)
-            soap_notes_prompt = get_soap_notes_prompt(transcribed_text)
-            summary = query_openai(summary_prompt)
-            soap_notes = query_openai(soap_notes_prompt)
-            # Tabs for Transcription and Summary
-            tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
+                        st.error("Unsupported file type")
+                        return
 
-            with tab1:
-                st.write(transcribed_text)
+                 with st.spinner('Summarizing...'):
+                    summary_prompt = prompts.get_medical_summary_prompt(notes_text)
+                    soap_notes_prompt = prompts.get_soap_notes_prompt(notes_text)
+                    summary = query_openai(summary_prompt)
+                    soap_notes = query_openai(soap_notes_prompt)
+                    patient_name = get_patient_name(soap_notes)
 
-            with tab2:
-                if summary:
-                    st.write(summary)
-                else:
-                    st.write("Could not generate summary for this file.")
-            with tab3:
-                st.write(soap_notes)
+                    if st.session_state.user_ref:
+                        st.session_state.patient_info = create_patients(patient_name, connection, cursor)
+                        create_notes(notes_text, summary, soap_notes, st.session_state.file_url,
+                                     st.session_state.user_ref['id'], st.session_state.patient_info['id'], connection,
+                                     cursor)
+
+                    # Tabs for Transcription and Summary
+                    tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
+                    st.session_state.extracted_text[st.session_state.existing_file] = notes_text
+                    st.session_state.summaries[st.session_state.existing_file] = summary
+                    st.session_state.soap_notes[st.session_state.existing_file] = soap_notes
+
+                    with tab1:
+                        st.write(notes_text)
+                    with tab2:
+                        if summary:
+                            st.write(summary)
+                        else:
+                            st.write("Could not generate summary for this file.")
+                    with tab3:
+                        st.write(soap_notes)
+                 st.session_state.clicked = False
+              else:
+
+                 tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
+
+                 with tab1:
+                        st.write(st.session_state.extracted_text[st.session_state.existing_file])
+                 with tab2:
+                        if st.session_state.summaries[st.session_state.existing_file]:
+                           st.write(st.session_state.summaries[st.session_state.existing_file])
+                        else:
+                           st.write("Could not generate summary for this file.")
+                 with tab3:
+                        st.write(st.session_state.soap_notes[st.session_state.existing_file])
+
+
+        if genre == "Real-time transcription":
+           st.sidebar.title("Real-Time Transcription")
+           transcription = st.sidebar.checkbox("Enable Transcription")
+           transcribed_text = ""
+           if st.session_state.user_info :
+            name = st.session_state.user_info['name']
+            email = st.session_state.user_info['email']
+            user = get_user_by_email(email,cursor)
+            if not user:
+               st.session_state.user_ref = create_user(name, email, connection, cursor)
+            else:
+                st.session_state. user_ref = user
+
+           if transcription:
+               if st.sidebar.button('Start 🔴'):
+                  recorder.start()
+                  while True:
+                    frame = recorder.read()
+                    st.session_state.audio.extend(frame)
+               if st.sidebar.button('Pause ⏸'):
+                 recorder.stop()
+               if st.sidebar.button('Resume ⏯'):
+                  recorder.start()
+                  while True:
+                    frame = recorder.read()
+                    st.session_state.audio.extend(frame)
+               if st.sidebar.button('Stop ⏹'):
+                   recorder.stop()
+                   if st.session_state.audio:
+                       file_name = f"recording_{datetime.now().strftime('%d%m%Y%H%M%S')}.wav"
+                       with st.spinner('Processing...'):
+                           file_url = upload_recording_to_s3(st.session_state.audio, "recordings", file_name)
+                           if file_url:
+                               transcribed_text += transcribe(file_url, file_name.split('.')[0], 'wav')
+                               st.session_state.file_url = file_url
+                           else:
+                               st.error('File upload failed.')
+                   with st.spinner('Summarizing...'):
+                        transcribed_text = transcribed_text  # extract_text_from_audio(st.session_state.recorded_audio_file)
+                        summary_prompt = prompts.get_medical_summary_prompt(transcribed_text)
+                        soap_notes_prompt = prompts.get_soap_notes_prompt(transcribed_text)
+                        summary = query_openai(summary_prompt)
+                        soap_notes = query_openai(soap_notes_prompt)
+                        patient_name = get_patient_name(soap_notes)
+                        if st.session_state.user_ref:
+                            st.session_state.patient_info = create_patients(patient_name, connection, cursor)
+                            create_notes(transcribed_text, summary, soap_notes, st.session_state.file_url,
+                                         st.session_state.user_ref['id'], st.session_state.patient_info['id'],
+                                         connection,
+                                         cursor)
+                        # Tabs for Transcription and Summary
+                        tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
+                        with tab1:
+                            st.write(transcribed_text)
+
+                        with tab2:
+                            if summary:
+                                st.write(summary)
+                            else:
+                                st.write("Could not generate summary for this file.")
+                        with tab3:
+                            st.write(soap_notes)
+                   st.session_state.recorded_audio_file = None
+                   st.session_state.audio = []
 
 
     except Exception as e:
