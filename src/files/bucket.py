@@ -14,7 +14,7 @@ import struct
 # Go up two levels to include the `src` directory
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..', '..')))
 from src.configs import env
-
+print(env.AWS_ACCESS_KEY_ID)
 s3_client = boto3.client(
     's3',
     aws_access_key_id = env.AWS_ACCESS_KEY_ID,
