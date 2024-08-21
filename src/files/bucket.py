@@ -23,7 +23,7 @@ s3_client = boto3.client(
 )
 response = s3_client.list_buckets()
 buckets = response['Buckets']
-bucket_name = [bucket for bucket in buckets if bucket['Name'] == "soap-notes-app-bucket"][0]['Name']
+bucket_name = [bucket for bucket in buckets if bucket['Name'] == "soap-notes-app"][0]['Name']
 
 # Function to upload file content directly to S3
 def upload_file_to_s3(file_content, file_name, folder_name, region_name='us-east-1'):
