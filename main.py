@@ -7,7 +7,7 @@ from datetime import datetime
 from src.auth import google
 from pvrecorder import PvRecorder
 from src import prompts
-from src.database.crud import create_user,get_user_by_email,create_notes,create_patients
+from src.database.crud import create_user,get_user_by_email,create_notes,create_patients,get_notes_of_user
 from src.database.connection import connect_to_db
 import base64
 from src.files.bucket import upload_file_to_s3,read_file_from_url,upload_recording_to_s3
@@ -156,16 +156,27 @@ def run_summarizer_app():
         if 'file_url' not in st.session_state:
              st.session_state.file_url = None
 
+        if 'user_notes' not in st.session_state:
+            st.session_state.user_notes = None
+        if 'radio_options' not in st.session_state:
+            st.session_state.radio_options = ["Upload files", "Real-time transcription"]
+        if 'previous_meeting_option_added' not in st.session_state:
+            st.session_state.previous_meeting_option_added = True
+        if not st.session_state.user_info:
+           pass
+        elif st.session_state.previous_meeting_option_added:
+            st.session_state.radio_options.append("Previous meetings")
+            st.session_state.previous_meeting_option_added = False
+        genre = st.sidebar.radio(
+            "Please select : ",
+            st.session_state.radio_options,
+        )
 
         col1, col2 = st.columns([50, 1])
 
         with col1:
             st.title("Soap Notes Generator")
         with col2:
-             genre = st.sidebar.radio(
-                "Please select : ",
-                ["Upload files", "Real-time transcription"],
-             )
              if not st.session_state.user_info:
                 auth_code = st.experimental_get_query_params().get('code')
                 if auth_code:
@@ -218,6 +229,10 @@ def run_summarizer_app():
                     st.session_state.user_ref = create_user(name, email, connection, cursor)
                 else:
                     st.session_state.user_ref = user
+                    # Get saved record of user
+                if st.session_state.user_info:
+                        st.session_state.user_notes = get_notes_of_user(st.session_state.user_ref['id'], cursor)
+
            st.sidebar.title("Upload Meeting Notes")
            uploaded_files = st.sidebar.file_uploader("Upload files",
                                                   type=["txt", "xlsx", "pdf", "mp3", "wav", "mp4", "mkv", "avi"],
@@ -388,6 +403,51 @@ def run_summarizer_app():
                             st.write(soap_notes)
                    st.session_state.recorded_audio_file = None
                    st.session_state.audio = []
+        if genre == "Previous meetings":
+            if st.session_state.user_notes:
+                user_notes_id_name = {}
+                for note in st.session_state.user_notes:
+                    if note['name'] is not None:
+                        user_notes_id_name[note['id']] = {
+                            'patient_name': note['name'],
+                            'extracted_text': note['extracted_text'],
+                            'summary': note['summary'],
+                            'soap_notes': note['soap_notes']
+                        }
+
+                    # Map patient names to their IDs
+                patient_names = {id: details['patient_name'] for id, details in user_notes_id_name.items()}
+
+                # Create a list of tuples (ID, Name) for selectbox
+                patient_name_options = [(id, name) for id, name in patient_names.items()]
+
+                # Display the selectbox with patient names
+                selected_patient_id = st.sidebar.selectbox(
+                    'Previous meetings Record',
+                    patient_name_options,
+                    format_func=lambda x: x[1]  # Show the patient name in the selectbox
+                )[0]  # Retrieve the selected ID
+
+                # Use the selected ID to get the corresponding record
+                selected_record = user_notes_id_name[selected_patient_id]
+                if selected_record:
+                    with col1:
+                        # Tabs for Transcription and Summary
+                        tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
+                        with tab1:
+                            st.write(selected_record['extracted_text'])
+
+                        with tab2:
+                            if selected_record['summary']:
+                                st.write(selected_record['summary'])
+                            else:
+                                st.write("Could not generate summary for this file.")
+                        with tab3:
+                            st.write(selected_record['soap_notes'])
+
+
+
+
 
 
     except Exception as e:
