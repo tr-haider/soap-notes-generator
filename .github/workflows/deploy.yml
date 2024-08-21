@@ -46,5 +46,5 @@ jobs:
             pip install -r requirements.txt
             # Restart the app using nohup
             pkill -f "streamlit run main.py" || true
-            nohup streamlit run app.py --server.port 8501 > streamlit.log 2>&1 &
+            nohup streamlit run main.py --server.port 8501 > streamlit.log 2>&1 &
           EOF

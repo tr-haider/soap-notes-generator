@@ -3,6 +3,19 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import requests
 from src.configs import env
+import socket
+
+def get_host_ip():
+    # Get the hostname of the machine
+    hostname = socket.gethostname()
+    # Get the IP address associated with the hostname
+    ip_address = socket.gethostbyname(hostname)
+    return hostname, ip_address
+
+hostname, ip_address = get_host_ip()
+print(f"Hostname: {hostname}")
+print(f"IP Address: {ip_address}")
+
 
 
 def get_authorization_url():
