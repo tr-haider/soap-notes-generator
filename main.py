@@ -1,4 +1,5 @@
 import time
+import subprocess
 import streamlit as st
 import openai
 import os
@@ -12,6 +13,7 @@ from src.database.connection import connect_to_db
 import base64
 from src.files.bucket import upload_file_to_s3,read_file_from_url,upload_recording_to_s3
 from src.transcriptions.transcribe import transcribe
+import streamlit.components.v1 as components
 connection, cursor = connect_to_db()
 
 recorder = PvRecorder(device_index=-1, frame_length=512)
@@ -20,6 +22,8 @@ load_dotenv()
 # Set your OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 google_icon_path = os.path.abspath("assets/icons8-google-48.png")
+# Custom HTML/JavaScript to create a copy button
+
 # Function to save uploaded file
 def uploaded_file_info(uploaded_file):
     content = uploaded_file.read()
@@ -64,6 +68,18 @@ def get_patient_name(text):
 def load_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode()
+
+def copy_text(text):
+    copy_button = f"""
+                            <button onclick="copyToClipboard()">📋</button>
+                            <script>
+                            function copyToClipboard() {{
+                              var copyText = `{text}`;
+                              navigator.clipboard.writeText(copyText);
+                            }}
+                            </script>
+                            """
+    return copy_button
 
 
 @st.cache(show_spinner=False)
@@ -316,27 +332,51 @@ def run_summarizer_app():
 
                     with tab1:
                         st.write(notes_text)
+                        copy_button = copy_text(notes_text)
+                        # Display the copy button
+                        components.html(copy_button)
+
+
                     with tab2:
                         if summary:
                             st.write(summary)
+                            copy_button = copy_text(summary)
+                            # Display the copy button
+                            components.html(copy_button)
                         else:
                             st.write("Could not generate summary for this file.")
                     with tab3:
                         st.write(soap_notes)
+                        copy_button = copy_text(soap_notes)
+                        # Display the copy button
+                        components.html(copy_button)
                  st.session_state.clicked = False
               else:
 
                  tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
 
                  with tab1:
-                        st.write(st.session_state.extracted_text[st.session_state.existing_file])
+                        text = st.session_state.extracted_text[st.session_state.existing_file]
+                        st.write(text)
+                        copy_button = copy_text(text)
+                        # Display the copy button
+                        components.html(copy_button)
+
                  with tab2:
                         if st.session_state.summaries[st.session_state.existing_file]:
-                           st.write(st.session_state.summaries[st.session_state.existing_file])
-                        else:
+                           summary = st.session_state.summaries[st.session_state.existing_file]
+                           st.write(summary)
+                           copy_button = copy_text(summary)
+                           # Display the copy button
+                           components.html(copy_button)
+                        else :
                            st.write("Could not generate summary for this file.")
                  with tab3:
-                        st.write(st.session_state.soap_notes[st.session_state.existing_file])
+                        notes = st.session_state.soap_notes[st.session_state.existing_file]
+                        st.write(notes)
+                        copy_button = copy_text(summary)
+                         # Display the copy button
+                        components.html(copy_button)
 
 
         if genre == "Real-time transcription":
@@ -393,16 +433,26 @@ def run_summarizer_app():
                         tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
                         with tab1:
                             st.write(transcribed_text)
+                            copy_button = copy_text(transcribed_text)
+                            # Display the copy button
+                            components.html(copy_button)
 
                         with tab2:
                             if summary:
                                 st.write(summary)
-                            else:
+                                copy_button = copy_text(summary)
+                                # Display the copy button
+                                components.html(copy_button)
+                            else :
                                 st.write("Could not generate summary for this file.")
                         with tab3:
                             st.write(soap_notes)
+                            copy_button = copy_text(soap_notes)
+                            # Display the copy button
+                            components.html(copy_button)
                    st.session_state.recorded_audio_file = None
                    st.session_state.audio = []
+
         if genre == "Previous meetings":
             if st.session_state.user_notes:
                 user_notes_id_name = {}
@@ -435,23 +485,32 @@ def run_summarizer_app():
                         # Tabs for Transcription and Summary
                         tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
                         with tab1:
-                            st.write(selected_record['extracted_text'])
+                            text = selected_record['extracted_text']
+                            st.write(text)
+                            copy_button = copy_text(text)
+                            # Display the copy button
+                            components.html(copy_button)
 
                         with tab2:
                             if selected_record['summary']:
-                                st.write(selected_record['summary'])
-                            else:
+                                summary = selected_record['summary']
+                                st.write(summary)
+                                copy_button = copy_text(summary)
+                                # Display the copy button
+                                components.html(copy_button)
+
+                            else :
                                 st.write("Could not generate summary for this file.")
                         with tab3:
-                            st.write(selected_record['soap_notes'])
-
-
-
-
-
-
+                            notes = selected_record['soap_notes']
+                            st.write(notes)
+                            copy_button = copy_text(notes)
+                            # Display the copy button
+                            components.html(copy_button)
+            else :
+                st.write("No previous meetings found!")
     except Exception as e:
-        st.error(f"An error occurred: {e}")
+         st.error(f"An error occurred: {e}")
 
 
 
