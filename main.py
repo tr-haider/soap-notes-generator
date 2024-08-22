@@ -1,5 +1,4 @@
 import time
-import subprocess
 import streamlit as st
 import openai
 import os
@@ -89,6 +88,8 @@ def fetch_user_info(auth_code):
     return user_info
 def run_summarizer_app():
     try:
+        st.set_page_config(page_title="Soap notes generator", page_icon=":memo:")
+
         st.markdown(
             """
             <style>
