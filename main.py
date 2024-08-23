@@ -93,6 +93,7 @@ def run_summarizer_app():
         st.markdown(
             """
             <style>
+            
                 .stButton button {
                     background-color: #4CAF50;
                     color: white;
@@ -334,23 +335,29 @@ def run_summarizer_app():
                     with tab1:
                         st.write(notes_text)
                         copy_button = copy_text(notes_text)
-                        # Display the copy button
-                        components.html(copy_button)
+                        st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                    unsafe_allow_html=True)
+                        components.html(copy_button, height=40, width=45, scrolling=False)
+                        st.markdown("</div>", unsafe_allow_html=True)
 
 
                     with tab2:
                         if summary:
                             st.write(summary)
                             copy_button = copy_text(summary)
-                            # Display the copy button
-                            components.html(copy_button)
+                            st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                        unsafe_allow_html=True)
+                            components.html(copy_button, height=40, width=45, scrolling=False)
+                            st.markdown("</div>", unsafe_allow_html=True)
                         else:
                             st.write("Could not generate summary for this file.")
                     with tab3:
                         st.write(soap_notes)
                         copy_button = copy_text(soap_notes)
-                        # Display the copy button
-                        components.html(copy_button)
+                        st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                    unsafe_allow_html=True)
+                        components.html(copy_button, height=40, width=45, scrolling=False)
+                        st.markdown("</div>", unsafe_allow_html=True)
                  st.session_state.clicked = False
               else:
 
@@ -360,24 +367,29 @@ def run_summarizer_app():
                         text = st.session_state.extracted_text[st.session_state.existing_file]
                         st.write(text)
                         copy_button = copy_text(text)
-                        # Display the copy button
-                        components.html(copy_button)
+                        st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                    unsafe_allow_html=True)
+                        components.html(copy_button, height=40, width=45, scrolling=False)
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                  with tab2:
                         if st.session_state.summaries[st.session_state.existing_file]:
                            summary = st.session_state.summaries[st.session_state.existing_file]
                            st.write(summary)
                            copy_button = copy_text(summary)
-                           # Display the copy button
-                           components.html(copy_button)
-                        else :
+                           st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                       unsafe_allow_html=True)
+                           components.html(copy_button, height=40, width=45, scrolling=False)
+                           st.markdown("</div>", unsafe_allow_html=True)
                            st.write("Could not generate summary for this file.")
                  with tab3:
                         notes = st.session_state.soap_notes[st.session_state.existing_file]
                         st.write(notes)
                         copy_button = copy_text(summary)
-                         # Display the copy button
-                        components.html(copy_button)
+                        st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                    unsafe_allow_html=True)
+                        components.html(copy_button, height=40, width=45, scrolling=False)
+                        st.markdown("</div>", unsafe_allow_html=True)
 
 
         if genre == "Real-time transcription":
@@ -435,22 +447,28 @@ def run_summarizer_app():
                         with tab1:
                             st.write(transcribed_text)
                             copy_button = copy_text(transcribed_text)
-                            # Display the copy button
-                            components.html(copy_button)
+                            st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                        unsafe_allow_html=True)
+                            components.html(copy_button, height=40, width=45, scrolling=False)
+                            st.markdown("</div>", unsafe_allow_html=True)
 
                         with tab2:
                             if summary:
                                 st.write(summary)
                                 copy_button = copy_text(summary)
-                                # Display the copy button
-                                components.html(copy_button)
+                                st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                            unsafe_allow_html=True)
+                                components.html(copy_button, height=40, width=45, scrolling=False)
+                                st.markdown("</div>", unsafe_allow_html=True)
                             else :
                                 st.write("Could not generate summary for this file.")
                         with tab3:
                             st.write(soap_notes)
                             copy_button = copy_text(soap_notes)
-                            # Display the copy button
-                            components.html(copy_button)
+                            st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                        unsafe_allow_html=True)
+                            components.html(copy_button, height=40, width=45, scrolling=False)
+                            st.markdown("</div>", unsafe_allow_html=True)
                    st.session_state.recorded_audio_file = None
                    st.session_state.audio = []
 
@@ -489,16 +507,20 @@ def run_summarizer_app():
                             text = selected_record['extracted_text']
                             st.write(text)
                             copy_button = copy_text(text)
-                            # Display the copy button
-                            components.html(copy_button)
+                            st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                        unsafe_allow_html=True)
+                            components.html(copy_button, height=40, width=45, scrolling=False)
+                            st.markdown("</div>", unsafe_allow_html=True)
 
                         with tab2:
                             if selected_record['summary']:
                                 summary = selected_record['summary']
                                 st.write(summary)
                                 copy_button = copy_text(summary)
-                                # Display the copy button
-                                components.html(copy_button)
+                                st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                            unsafe_allow_html=True)
+                                components.html(copy_button, height=40, width=45, scrolling=False)
+                                st.markdown("</div>", unsafe_allow_html=True)
 
                             else :
                                 st.write("Could not generate summary for this file.")
@@ -506,8 +528,10 @@ def run_summarizer_app():
                             notes = selected_record['soap_notes']
                             st.write(notes)
                             copy_button = copy_text(notes)
-                            # Display the copy button
-                            components.html(copy_button)
+                            st.markdown("<div style='background-color: transparent; padding: 0; margin: 0;'>",
+                                        unsafe_allow_html=True)
+                            components.html(copy_button, height=40, width=45, scrolling=False)
+                            st.markdown("</div>", unsafe_allow_html=True)
             else :
                 st.write("No previous meetings found!")
     except Exception as e:
