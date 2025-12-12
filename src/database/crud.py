@@ -1,6 +1,7 @@
 from datetime import datetime
 import src.database.queries as queries
 import streamlit as st
+import os
 def create_user(name, email, connection, cursor):
     try:
         data = {
@@ -55,8 +56,12 @@ def create_notes(extracted_text, summary, soap_notes, file_url, user_id, patient
 
 def create_patients(name, connection, cursor):
     try:
+        # Ensure name is not None or empty
+        if not name or name.strip() == "":
+            name = "Unknown Patient"
+        
         data = {
-            'name': name,
+            'name': name.strip(),
             'visited_at': datetime.now(),
             'created_at': datetime.now(),
             'updated_at': datetime.now(),
@@ -70,6 +75,7 @@ def create_patients(name, connection, cursor):
         return data
     except Exception as e:
         st.error(f"An error occurred while creating the patient: {e}")
+        return None
 
 def get_notes(extracted_text, patient_id, cursor):
     try:

@@ -14,7 +14,11 @@ def connect_to_db():
         cursor = connection.cursor()
         return connection, cursor
     except mysql.connector.Error as e:
-        st.error(f"Error while creating connection to database : {e}")
+        if 'st' in globals():
+            st.error(f"Error while creating connection to database : {e}")
+        else:
+            print(f"Error while creating connection to database : {e}")
+        raise
 
 
 

@@ -1,7 +1,9 @@
 import time
 import streamlit as st
-import openai
+from openai import OpenAI
+import httpx
 import os
+import re
 from dotenv import load_dotenv
 from datetime import datetime
 from src.auth import google
@@ -13,13 +15,20 @@ import base64
 from src.files.bucket import upload_file_to_s3,read_file_from_url,upload_recording_to_s3
 from src.transcriptions.transcribe import transcribe
 import streamlit.components.v1 as components
-connection, cursor = connect_to_db()
 
-recorder = PvRecorder(device_index=-1, frame_length=512)
-# Load environment variables
+# Load environment variables first
 load_dotenv()
-# Set your OpenAI API key
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Initialize OpenAI client with custom httpx client to avoid proxies compatibility issue
+custom_http_client = httpx.Client(timeout=60.0)
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), http_client=custom_http_client)
+
+# Initialize database connection lazily (will be created when needed)
+connection = None
+cursor = None
+
+# Initialize PvRecorder lazily (will be created when needed)
+recorder = None
 google_icon_path = os.path.abspath("assets/icons8-google-48.png")
 # Custom HTML/JavaScript to create a copy button
 
@@ -33,15 +42,15 @@ def uploaded_file_info(uploaded_file):
             "content": content
     }
     return file_info
-# Function to query OpenAI GPT-4 for summarization
+# Function to query OpenAI GPT-4o for summarization
 def query_openai(prompt):
     try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content.strip()
-    except openai.OpenAIError as e:
+    except Exception as e:
         error_message = str(e)
         if "rate limit" in error_message.lower():
             st.error("You have exceeded the rate limit for GPT-3.5 Turbo. Please try again later.")
@@ -54,14 +63,36 @@ def query_openai(prompt):
 
 # Function to get patient name
 def get_patient_name(text):
+    if not text:
+        return "Unknown Patient"
+    
+    # Try to find patient name in various formats
+    patterns = [
+        r'patient_name\s*:\s*"([^"]+)"',
+        r'patient_name\s*:\s*([^\n,]+)',
+        r'The patient,\s*"([^"]+)"',
+        r'The patient,\s*([^,\n]+)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            name = match.group(1).strip()
+            if name and name.lower() != "patient_name":
+                return name
+    
+    # Fallback: try the original method
     start = text.find("The patient,")
     if start != -1:
         start += len("The patient,")
         end = text.find(",", start)
         if end != -1:
-            name = text[start:end].strip()
-            return name
-    return None
+            name = text[start:end].strip().strip('"')
+            if name:
+                return name
+    
+    # If no name found, return default
+    return "Unknown Patient"
 
 
 def load_image(image_path):
@@ -80,6 +111,24 @@ def copy_text(text):
                             """
     return copy_button
 
+
+def get_db_connection():
+    """Lazily initialize and return database connection"""
+    global connection, cursor
+    try:
+        if connection is None or not connection.is_connected():
+            connection, cursor = connect_to_db()
+    except Exception as e:
+        st.error(f"Failed to connect to database: {e}")
+        raise
+    return connection, cursor
+
+def get_recorder():
+    """Lazily initialize and return PvRecorder"""
+    global recorder
+    if recorder is None:
+        recorder = PvRecorder(device_index=-1, frame_length=512)
+    return recorder
 
 @st.cache(show_spinner=False)
 def fetch_user_info(auth_code):
@@ -240,6 +289,7 @@ def run_summarizer_app():
         # Sidebar for uploading multiple files
         if genre == "Upload files":
            if st.session_state.user_info:
+                connection, cursor = get_db_connection()
                 name = st.session_state.user_info['name']
                 email = st.session_state.user_info['email']
                 user = get_user_by_email(email,  cursor)
@@ -321,10 +371,14 @@ def run_summarizer_app():
                     patient_name = get_patient_name(soap_notes)
 
                     if st.session_state.user_ref:
+                        connection, cursor = get_db_connection()
                         st.session_state.patient_info = create_patients(patient_name, connection, cursor)
-                        create_notes(notes_text, summary, soap_notes, st.session_state.file_url,
-                                     st.session_state.user_ref['id'], st.session_state.patient_info['id'], connection,
-                                     cursor)
+                        if st.session_state.patient_info and st.session_state.patient_info.get('id'):
+                            create_notes(notes_text, summary, soap_notes, st.session_state.file_url,
+                                         st.session_state.user_ref['id'], st.session_state.patient_info['id'], connection,
+                                         cursor)
+                        else:
+                            st.error("Failed to create patient record. Notes were not saved.")
 
                     # Tabs for Transcription and Summary
                     tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
@@ -397,6 +451,7 @@ def run_summarizer_app():
            transcription = st.sidebar.checkbox("Enable Transcription")
            transcribed_text = ""
            if st.session_state.user_info :
+            connection, cursor = get_db_connection()
             name = st.session_state.user_info['name']
             email = st.session_state.user_info['email']
             user = get_user_by_email(email,cursor)
@@ -406,6 +461,7 @@ def run_summarizer_app():
                 st.session_state. user_ref = user
 
            if transcription:
+               recorder = get_recorder()
                if st.sidebar.button('Start 🔴'):
                   recorder.start()
                   while True:
@@ -437,11 +493,15 @@ def run_summarizer_app():
                         soap_notes = query_openai(soap_notes_prompt)
                         patient_name = get_patient_name(soap_notes)
                         if st.session_state.user_ref:
+                            connection, cursor = get_db_connection()
                             st.session_state.patient_info = create_patients(patient_name, connection, cursor)
-                            create_notes(transcribed_text, summary, soap_notes, st.session_state.file_url,
-                                         st.session_state.user_ref['id'], st.session_state.patient_info['id'],
-                                         connection,
-                                         cursor)
+                            if st.session_state.patient_info and st.session_state.patient_info.get('id'):
+                                create_notes(transcribed_text, summary, soap_notes, st.session_state.file_url,
+                                             st.session_state.user_ref['id'], st.session_state.patient_info['id'],
+                                             connection,
+                                             cursor)
+                            else:
+                                st.error("Failed to create patient record. Notes were not saved.")
                         # Tabs for Transcription and Summary
                         tab1, tab2, tab3 = st.tabs(["Extracted Text", "Summary", "Soap Notes"])
                         with tab1:
